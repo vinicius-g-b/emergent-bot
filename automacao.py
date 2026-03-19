@@ -115,6 +115,9 @@ def ai_decision_loop():
             print(f"⚠️ Erro ao ler a Binance US ({e}). Usando dados de emergência.")
             market_data = [0.0, 0.0, 0.0]
 
+        # ---> ESTA É A LINHA QUE HAVIA SUMIDO: <---
+        tensor_inputs = torch.tensor(market_data, dtype=torch.float32)
+        
         # 2. O CÉREBRO PENSA
         with torch.no_grad():
             prediction = model(tensor_inputs)
