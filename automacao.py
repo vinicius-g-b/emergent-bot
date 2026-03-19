@@ -95,31 +95,25 @@ def ai_decision_loop():
         print("\n" + "="*40)
         print(f"⏰ [{time.strftime('%H:%M:%S')}] Iniciando ciclo de análise...")
 
-        # 1. LEITURA DE MERCADO REAL (COINGECKO API - Imune ao bloqueio dos EUA)
-        print("📊 Buscando dados ao vivo do Bitcoin no CoinGecko...")
+       # 1. LEITURA DE MERCADO REAL (BINANCE US - Imune a bloqueios de servidores EUA)
+        print("📊 Buscando dados ao vivo do Bitcoin na Binance US...")
         try:
-            url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true"
-            headers = {'User-Agent': 'Mozilla/5.0'} # Truque para o CoinGecko não nos bloquear
+            # Usamos a URL da filial americana da Binance
+            url = "https://api.binance.us/api/v3/ticker/24hr?symbol=BTCUSDT"
+            headers = {'User-Agent': 'Mozilla/5.0'}
             resposta = requests.get(url, headers=headers).json()
             
-            dados_btc = resposta['bitcoin']
-            preco_real = float(dados_btc['usd'])
-            mudanca_24h = float(dados_btc['usd_24h_change'])
-            volume_24h = float(dados_btc['usd_24h_vol'])
-
-            # Normalizando para a IA
-            variacao = mudanca_24h / 100.0
-            preco_atual = preco_real / 100000.0 
-            volume = volume_24h / 100000000000.0 # Ajustado para a escala do CoinGecko
+            # A matemática volta a ser a original da sua IA:
+            variacao = float(resposta['priceChangePercent']) / 100.0
+            preco_atual = float(resposta['lastPrice']) / 100000.0 
+            volume = float(resposta['volume']) / 100000.0
             
             market_data = [variacao, preco_atual, volume]
-            print(f"📈 Preço BTC: ${preco_real:.2f} | Variação: {mudanca_24h:.2f}%")
+            print(f"📈 Preço BTC: ${float(resposta['lastPrice']):.2f} | Variação: {resposta['priceChangePercent']}%")
             
         except Exception as e:
-            print(f"⚠️ Erro ao ler o CoinGecko ({e}). Usando dados de emergência.")
+            print(f"⚠️ Erro ao ler a Binance US ({e}). Usando dados de emergência.")
             market_data = [0.0, 0.0, 0.0]
-
-        tensor_inputs = torch.tensor(market_data, dtype=torch.float32)
 
         # 2. O CÉREBRO PENSA
         with torch.no_grad():
