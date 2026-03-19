@@ -42,7 +42,7 @@ class EmergentBrain(nn.Module):
 RPC_URL = "https://ethereum-sepolia-rpc.publicnode.com"
 web3 = Web3(Web3.HTTPProvider(RPC_URL))
 
-VAULT_ADDRESS = web3.to_checksum_address("0x6b1519CA41602B91F12A6269F04AE656D5FB480") # Endereço correto de 42 chars
+VAULT_ADDRESS = web3.to_checksum_address("0x6b1519CA41602B91F12A6269F04AE656D5FB4803") # Endereço correto de 42 chars
 EUSD_ADDRESS = web3.to_checksum_address("0x960C3A75ad6b793882D643f8B71c33945269af01")
 
 # ALERTA DE SEGURANÇA: A chave agora vem do cofre do Render, não mais do código!
