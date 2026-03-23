@@ -33,7 +33,7 @@ def avisar_app(acao, motivo, confianca):
 # VARIÁVEIS DE ESTADO (Para o painel /health do Flask)
 # ==========================================
 status_bot = {
-    "status": "Iniciando",
+    "status": "Starting",
     "ultima_analise": "N/A",
     "preco_btc": 0.0,
     "confianca_ia": 0.0,
@@ -165,42 +165,42 @@ def ai_decision_loop():
         # TRAVA DE CONFIANÇA (Threshold de 85%)
         if confianca < 0.85:
             print(f"⚖️ Confiança muito baixa ({status_bot['confianca_ia']}%). A IA prefere MANTER (Hold) por segurança.")
-            status_bot["ultima_decisao"] = "HOLD (Insegurança)"
+            status_bot["ultima_decisao"] = "HOLD"
             
-            # IA AVISA O APP:
-            avisar_app("HOLD", f"Confiança de mercado baixa ({status_bot['confianca_ia']}%). Aguardando melhor clareza para operar.", status_bot["confianca_ia"])
+            # IA AVISA O APP EM INGLÊS:
+            avisar_app("HOLD", f"Low market confidence ({status_bot['confianca_ia']}%). Waiting for clearer signals to operate.", status_bot["confianca_ia"])
             
         else:
             if decision == 2:
                 print(f"📈 Decisão da IA: COMPRAR (Confiança: {status_bot['confianca_ia']}%)")
-                status_bot["ultima_decisao"] = "COMPRAR"
+                status_bot["ultima_decisao"] = "BUY"
                 
                 if AI_PRIVATE_KEY != "CHAVE_NAO_ENCONTRADA": executar_ordem("COMPRA", 100)
                 
-                # IA AVISA O APP:
-                avisar_app("COMPRA", f"Sinal forte de alta detectado no BTC a ${status_bot['preco_btc']:.2f}. Aumentando exposição no mercado spot.", status_bot["confianca_ia"])
+                # IA AVISA O APP EM INGLÊS:
+                avisar_app("BUY", f"Strong bullish signal on BTC at ${status_bot['preco_btc']:.2f}. Increasing spot market exposure.", status_bot["confianca_ia"])
                 
             elif decision == 0:
                 print(f"📉 Decisão da IA: VENDER (Confiança: {status_bot['confianca_ia']}%)")
-                status_bot["ultima_decisao"] = "VENDER"
+                status_bot["ultima_decisao"] = "SELL"
                 
                 if AI_PRIVATE_KEY != "CHAVE_NAO_ENCONTRADA": executar_ordem("VENDA", 100)
                 
-                # IA AVISA O APP:
-                avisar_app("HEDGE", f"Risco de queda detectado no BTC. Convertendo fundos para eUSD para proteger o capital.", status_bot["confianca_ia"])
+                # IA AVISA O APP EM INGLÊS:
+                avisar_app("HEDGE", f"Downside risk detected on BTC. Converting funds to eUSD for capital protection.", status_bot["confianca_ia"])
                 
             else:
                 print(f"⚖️ Decisão da IA: MANTER (Hold) - Mercado lateral (Confiança: {status_bot['confianca_ia']}%)")
                 status_bot["ultima_decisao"] = "HOLD"
                 
-                # IA AVISA O APP:
-                avisar_app("MONITORANDO", "Mercado lateralizado. Mantendo posições atuais intactas no cofre.", status_bot["confianca_ia"])
+                # IA AVISA O APP EM INGLÊS:
+                avisar_app("MONITORING", "Market is moving sideways. Keeping current vault positions intact.", status_bot["confianca_ia"])
 
-        status_bot["status"] = "Dormindo"
+        status_bot["status"] = "Sleeping"
         minutos = 5
         print(f"💤 Ciclo encerrado. O cérebro vai descansar por {minutos} minutos...")
         time.sleep(minutos * 60)
-        status_bot["status"] = "Analisando"
+        status_bot["status"] = "Analyzing"
         
 # ==========================================
 # 5. SERVIDOR WEB E PAINEL DE STATUS
@@ -209,7 +209,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "O Cérebro da Emergent está online e patrulhando a blockchain!"
+    return "Emergent Brain is online and patrolling the blockchain!"
 
 @app.route('/health')
 def health_check():
