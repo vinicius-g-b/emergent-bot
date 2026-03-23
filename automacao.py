@@ -7,6 +7,27 @@ import torch.nn as nn
 import threading
 from flask import Flask, jsonify
 import os
+from supabase import create_client, Client
+
+# ==========================================
+# 0. CONFIGURAÇÃO DO ALTO-FALANTE (SUPABASE)
+# ==========================================
+URL_SUPABASE = os.environ.get("SUPABASE_URL", "https://bjsfmluawlcfsfvnjorf.supabase.co")
+CHAVE_SUPABASE = os.environ.get("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJqc2ZtbHVhd2xjZnNmdm5qb3JmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMjY5ODUsImV4cCI6MjA4OTgwMjk4NX0.0WME-7HzSpy0CnPLIjbdjE6h0jPBO5J5-hWclXPWNnE")
+
+supabase: Client = create_client(URL_SUPABASE, CHAVE_SUPABASE)
+
+def avisar_app(acao, motivo, confianca):
+    """Função que envia a decisão da IA direto para a tela do celular do usuário"""
+    try:
+        supabase.table("ai_logs").insert({
+            "action_type": acao,
+            "reason": motivo,
+            "confidence": int(confianca)
+        }).execute()
+        print(f"📡 App notificado via Supabase: {acao} - {motivo}")
+    except Exception as e:
+        print(f"❌ Erro ao notificar o App: {e}")
 
 # ==========================================
 # VARIÁVEIS DE ESTADO (Para o painel /health do Flask)
@@ -42,10 +63,9 @@ class EmergentBrain(nn.Module):
 RPC_URL = "https://ethereum-sepolia-rpc.publicnode.com"
 web3 = Web3(Web3.HTTPProvider(RPC_URL))
 
-VAULT_ADDRESS = web3.to_checksum_address("0x6b1519CA41602B91F12A6269F04AE656D5FB4803") # Endereço correto de 42 chars
+VAULT_ADDRESS = web3.to_checksum_address("0x6b1519CA41602B91F12A6269F04AE656D5FB4803")
 EUSD_ADDRESS = web3.to_checksum_address("0x960C3A75ad6b793882D643f8B71c33945269af01")
 
-# ALERTA DE SEGURANÇA: A chave agora vem do cofre do Render, não mais do código!
 AI_PRIVATE_KEY = os.environ.get("PRIVATE_KEY", "CHAVE_NAO_ENCONTRADA") 
 
 if AI_PRIVATE_KEY != "CHAVE_NAO_ENCONTRADA":
@@ -53,13 +73,15 @@ if AI_PRIVATE_KEY != "CHAVE_NAO_ENCONTRADA":
 else:
     print("🚨 ERRO CRÍTICO: Chave privada não encontrada nas Variáveis de Ambiente!")
 
-with open("vault_abi.json", "r") as file:
-    vault_abi = json.load(file)
-
-vault_contract = web3.eth.contract(address=VAULT_ADDRESS, abi=vault_abi)
+try:
+    with open("vault_abi.json", "r") as file:
+        vault_abi = json.load(file)
+    vault_contract = web3.eth.contract(address=VAULT_ADDRESS, abi=vault_abi)
+except Exception as e:
+    print(f"⚠️ Erro ao carregar vault_abi.json: {e}")
 
 # ==========================================
-# 3. FUNÇÕES DE EXECUÇÃO ON-CHAIN (Com Gas Estiamte e Nonce Pendente)
+# 3. FUNÇÕES DE EXECUÇÃO ON-CHAIN
 # ==========================================
 def executar_ordem(tipo_ordem, valor_dolares):
     amount_wei = web3.to_wei(valor_dolares, 'ether')
@@ -72,16 +94,13 @@ def executar_ordem(tipo_ordem, valor_dolares):
     print(f"Assinando transação de {tipo_ordem} de ${valor_dolares}...")
     
     try:
-        # Pega o Nonce mais atualizado (incluindo os que estão na fila)
         nonce = web3.eth.get_transaction_count(ai_account.address, 'pending')
-        
-        # Estima o Gás exato necessário em vez de chutar um valor
         gas_estimado = funcao.estimate_gas({'from': ai_account.address})
         
         tx = funcao.build_transaction({
             'from': ai_account.address,
             'nonce': nonce,
-            'gas': int(gas_estimado * 1.2), # Margem de segurança de 20%
+            'gas': int(gas_estimado * 1.2), 
             'gasPrice': web3.eth.gas_price
         })
         
@@ -135,10 +154,8 @@ def ai_decision_loop():
 
         tensor_inputs = torch.tensor(market_data, dtype=torch.float32)
 
-        # O decorador no_grad já economiza RAM no Render
         with torch.no_grad():
             prediction = model(tensor_inputs)
-            # Transforma os números brutos em porcentagem de certeza (0 a 1)
             probabilidades = torch.nn.functional.softmax(prediction, dim=0)
             confianca = torch.max(probabilidades).item()
             decision = torch.argmax(prediction).item() 
@@ -150,20 +167,34 @@ def ai_decision_loop():
             print(f"⚖️ Confiança muito baixa ({status_bot['confianca_ia']}%). A IA prefere MANTER (Hold) por segurança.")
             status_bot["ultima_decisao"] = "HOLD (Insegurança)"
             
+            # IA AVISA O APP:
+            avisar_app("HOLD", f"Confiança de mercado baixa ({status_bot['confianca_ia']}%). Aguardando melhor clareza para operar.", status_bot["confianca_ia"])
+            
         else:
             if decision == 2:
                 print(f"📈 Decisão da IA: COMPRAR (Confiança: {status_bot['confianca_ia']}%)")
                 status_bot["ultima_decisao"] = "COMPRAR"
+                
                 if AI_PRIVATE_KEY != "CHAVE_NAO_ENCONTRADA": executar_ordem("COMPRA", 100)
+                
+                # IA AVISA O APP:
+                avisar_app("COMPRA", f"Sinal forte de alta detectado no BTC a ${status_bot['preco_btc']:.2f}. Aumentando exposição no mercado spot.", status_bot["confianca_ia"])
                 
             elif decision == 0:
                 print(f"📉 Decisão da IA: VENDER (Confiança: {status_bot['confianca_ia']}%)")
                 status_bot["ultima_decisao"] = "VENDER"
+                
                 if AI_PRIVATE_KEY != "CHAVE_NAO_ENCONTRADA": executar_ordem("VENDA", 100)
+                
+                # IA AVISA O APP:
+                avisar_app("HEDGE", f"Risco de queda detectado no BTC. Convertendo fundos para eUSD para proteger o capital.", status_bot["confianca_ia"])
                 
             else:
                 print(f"⚖️ Decisão da IA: MANTER (Hold) - Mercado lateral (Confiança: {status_bot['confianca_ia']}%)")
                 status_bot["ultima_decisao"] = "HOLD"
+                
+                # IA AVISA O APP:
+                avisar_app("MONITORANDO", "Mercado lateralizado. Mantendo posições atuais intactas no cofre.", status_bot["confianca_ia"])
 
         status_bot["status"] = "Dormindo"
         minutos = 5
@@ -180,7 +211,6 @@ app = Flask(__name__)
 def home():
     return "O Cérebro da Emergent está online e patrulhando a blockchain!"
 
-# Nova rota para monitoramento estilo "Sênior"
 @app.route('/health')
 def health_check():
     return jsonify(status_bot)
