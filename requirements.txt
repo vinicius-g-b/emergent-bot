@@ -4,3 +4,4 @@ web3
 requests
 flask
 numpy
+supabase==2.3.4
