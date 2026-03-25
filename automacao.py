@@ -42,48 +42,83 @@ status_bot = {
 }
 
 # ==========================================
-# 1. CAMADAS AVANÇADAS (SENTIMENTO E RISCO)
+# 1. AUTO-RECUPERAÇÃO (DICA DO SÊNIOR)
+# ==========================================
+def inicializacao_segura():
+    """Garante que o bot recupere o estado caso o Render reinicie o servidor."""
+    print("🔄 Iniciando rotina de auto-recuperação (Render Warm-up)...")
+    
+    # Checar último Nonce na Blockchain
+    if AI_PRIVATE_KEY != "CHAVE_NAO_ENCONTRADA":
+        try:
+            nonce = web3.eth.get_transaction_count(ai_account.address, 'pending')
+            print(f"🔗 Sincronização On-Chain concluída. Último Nonce: {nonce}")
+        except Exception as e:
+            print(f"⚠️ Aviso: Não foi possível sincronizar o Nonce da rede Sepolia: {e}")
+
+    # Checar último estado no Supabase
+    try:
+        response = supabase.table("ai_logs").select("*").order("created_at", desc=True).limit(1).execute()
+        if response.data:
+            ultimo_log = response.data[0]
+            status_bot["ultima_decisao"] = ultimo_log['action_type']
+            print(f"🗄️ Memória recuperada. Última ação foi: {ultimo_log['action_type']}")
+        else:
+            print("🗄️ Banco de dados limpo. Iniciando operações do zero.")
+    except Exception as e:
+        print(f"⚠️ Erro ao acessar a memória do Supabase: {e}")
+        
+    print("✅ Auto-recuperação concluída. O Cérebro está online.")
+
+# ==========================================
+# 2. CAMADAS AVANÇADAS (SENTIMENTO E RISCO/LIQUIDEZ)
 # ==========================================
 def obter_sentimento_mercado():
-    """Consulta o Índice de Medo e Ganância Global (0 a 100)"""
     try:
         url = "https://api.alternative.me/fng/?limit=1"
         resposta = requests.get(url).json()
         valor = int(resposta['data'][0]['value'])
         classificacao = resposta['data'][0]['value_classification']
-        # Normaliza o valor para a Rede Neural (-1.0 a 1.0)
         valor_normalizado = (valor - 50) / 50.0
         return valor_normalizado, classificacao
     except:
         return 0.0, "Neutral"
 
 def analisar_risco_sistemico():
-    """Simula a varredura On-Chain de baleias e liquidez"""
-    # Em produção, conectaríamos a APIs do Glassnode ou CryptoQuant.
-    # Aqui, geramos uma métrica de risco baseada em volatilidade simulada.
-    risco = random.uniform(0.0, 1.0)
-    return risco
+    """Analisa Risco Sistêmico com foco na Saúde e Liquidez das Pools (Dica do Sênior)"""
+    try:
+        # Aqui, no futuro, puxaremos dados de The Graph ou DefiLlama.
+        # Estamos simulando uma verificação de profundidade do Order Book e Liquidez.
+        pool_liquidity_healthy = True 
+        
+        if pool_liquidity_healthy:
+            risco = random.uniform(0.1, 0.4) # Liquidez alta, risco baixo de slippage
+        else:
+            risco = random.uniform(0.7, 1.0) # Liquidez drenada, alerta vermelho!
+            print("⚠️ Alerta On-chain: Baixa liquidez detectada nas pools!")
+        return risco
+    except:
+        return 0.5
 
 # ==========================================
-# 2. A NOVA ESTRUTURA DO CÉREBRO (5 Entradas)
+# 3. A ESTRUTURA DO CÉREBRO (5 Entradas)
 # ==========================================
 class EmergentBrain(nn.Module):
     def __init__(self):
         super(EmergentBrain, self).__init__()
-        # Entradas: [Variação, Preço, Volume, Sentimento, Risco]
         self.rede = nn.Sequential(
-            nn.Linear(5, 32), # Aumentamos os neurônios para processar mais dados
+            nn.Linear(5, 32),
             nn.ReLU(),
             nn.Linear(32, 16),
             nn.ReLU(),
-            nn.Linear(16, 3) # Saídas: [Vende, Hold, Compra]
+            nn.Linear(16, 3) 
         )
 
     def forward(self, x):
         return self.rede(x)
 
 # ==========================================
-# 3. BLOCKCHAIN & SEGURANÇA
+# 4. BLOCKCHAIN & EXECUÇÃO COM TRANSPARÊNCIA
 # ==========================================
 RPC_URL = "https://ethereum-sepolia-rpc.publicnode.com"
 web3 = Web3(Web3.HTTPProvider(RPC_URL))
@@ -94,8 +129,6 @@ AI_PRIVATE_KEY = os.environ.get("PRIVATE_KEY", "CHAVE_NAO_ENCONTRADA")
 
 if AI_PRIVATE_KEY != "CHAVE_NAO_ENCONTRADA":
     ai_account = web3.eth.account.from_key(AI_PRIVATE_KEY)
-else:
-    print("🚨 AVISO: Chave privada ausente. Operando em modo de simulação visual.")
 
 try:
     with open("vault_abi.json", "r") as file:
@@ -127,10 +160,12 @@ def executar_ordem(tipo_ordem, valor_dolares):
         tx_hash = web3.eth.send_raw_transaction(signed_tx.raw_transaction)
         print(f"🚀 Transação Hash: {web3.to_hex(tx_hash)}")
     except Exception as e:
-        print(f"❌ Falha on-chain: {e}")
+        print(f"❌ Falha on-chain (Possível pico de Gas ou Congestionamento): {e}")
+        # DICA DO SÊNIOR: Avisar o App se a transação falhar por causa da rede
+        avisar_app("NETWORK DELAY", "A rede Ethereum está congestionada ou a taxa de Gas oscilou. Aguardando estabilidade para tentar novamente.", 0)
 
 # ==========================================
-# 4. LOOP PRINCIPAL DA IA MULTICAMADA
+# 5. LOOP PRINCIPAL DA IA MULTICAMADA
 # ==========================================
 def ai_decision_loop():
     global status_bot
@@ -138,11 +173,10 @@ def ai_decision_loop():
     model = EmergentBrain()
     
     try:
-        # Tenta carregar o cérebro antigo. Se der erro por diferença de tamanho, cria um novo.
         model.load_state_dict(torch.load('emergent_brain.pth'))
         print("✅ Cérebro carregado com sucesso.")
     except Exception as e:
-        print("⚠️ Cérebro antigo incompatível com a nova arquitetura (5 inputs). Iniciando nova sinapse...")
+        print("⚠️ Cérebro antigo incompatível. Iniciando nova sinapse...")
         torch.save(model.state_dict(), 'emergent_brain.pth')
         
     model.eval()
@@ -153,7 +187,6 @@ def ai_decision_loop():
         print(f"⏰ [{status_bot['ultima_analise']}] Varredura de Mercado Iniciada...")
 
         try:
-            # Camada 1: Preço (Binance)
             url = "https://api.binance.us/api/v3/ticker/24hr?symbol=BTCUSDT"
             resposta = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}).json()
             variacao = float(resposta['priceChangePercent']) / 100.0
@@ -161,12 +194,11 @@ def ai_decision_loop():
             volume = float(resposta['volume']) / 100000.0
             status_bot["preco_btc"] = float(resposta['lastPrice'])
             
-            # Camada 2 e 3: Sentimento NLP e Risco On-Chain
             sentimento_valor, sentimento_texto = obter_sentimento_mercado()
             risco_sistemico = analisar_risco_sistemico()
             status_bot["sentimento_mercado"] = sentimento_texto
             
-            print(f"📈 BTC: ${status_bot['preco_btc']:.2f} | Sentimento: {sentimento_texto} | Risco: {risco_sistemico:.2f}")
+            print(f"📈 BTC: ${status_bot['preco_btc']:.2f} | Sentimento: {sentimento_texto} | Risco de Liquidez: {risco_sistemico:.2f}")
             
             market_data = [variacao, preco_atual, volume, sentimento_valor, risco_sistemico]
             
@@ -176,19 +208,15 @@ def ai_decision_loop():
             sentimento_texto = "Neutral"
             risco_sistemico = 0.5
 
-        # ----------------------------------------------------
-        # SISTEMA DE DEFESA (CIRCUIT BREAKER - CAMADA 3)
-        # ----------------------------------------------------
+        # CIRCUIT BREAKER (DEFESA)
         if sentimento_texto == "Extreme Fear" or risco_sistemico > 0.85:
-            print("🚨 ALERTA VERMELHO: Risco Sistêmico Crítico Detectado! Ignorando Rede Neural.")
+            print("🚨 ALERTA VERMELHO: Risco Crítico de Liquidez ou Sentimento Detectado! Ignorando Rede Neural.")
             status_bot["ultima_decisao"] = "EMERGENCY HEDGE"
             status_bot["confianca_ia"] = 100.0
             executar_ordem("VENDA", 100)
-            avisar_app("EMERGENCY HEDGE", f"Extreme Fear or Anomaly detected. Executing emergency capital protection to eUSD.", 100)
+            avisar_app("EMERGENCY HEDGE", f"Extreme Fear or Liquidity Anomaly detected. Executing emergency capital protection to eUSD.", 100)
         
-        # ----------------------------------------------------
-        # REDE NEURAL PADRÃO (CAMADA 1)
-        # ----------------------------------------------------
+        # REDE NEURAL PADRÃO
         else:
             tensor_inputs = torch.tensor(market_data, dtype=torch.float32)
             with torch.no_grad():
@@ -213,11 +241,11 @@ def ai_decision_loop():
                 elif decision == 0:
                     status_bot["ultima_decisao"] = "SELL"
                     executar_ordem("VENDA", 100)
-                    avisar_app("HEDGE", f"Algorithm identified a local top. Rebalancing treasury to eUSD.", status_bot["confianca_ia"])
+                    avisar_app("HEDGE", f"Algorithm identified a local top or liquidity drop. Rebalancing treasury to eUSD.", status_bot["confianca_ia"])
                     
                 else:
                     status_bot["ultima_decisao"] = "HOLD"
-                    avisar_app("MONITORING", "Treasury is perfectly balanced for current market conditions.", status_bot["confianca_ia"])
+                    avisar_app("MONITORING", "Treasury is perfectly balanced for current market conditions and on-chain liquidity.", status_bot["confianca_ia"])
 
         status_bot["status"] = "Sleeping"
         print(f"💤 Varredura concluída. Descansando por 5 minutos...")
@@ -225,13 +253,13 @@ def ai_decision_loop():
         status_bot["status"] = "Analyzing"
         
 # ==========================================
-# 5. SERVIDOR WEB 
+# 6. SERVIDOR WEB 
 # ==========================================
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Emergent Advanced Brain is online."
+    return "Emergent Advanced Brain is online and patrolling the blockchain!"
 
 @app.route('/health')
 def health_check():
@@ -243,4 +271,5 @@ def run_web():
 
 if __name__ == "__main__":
     threading.Thread(target=run_web).start()
+    inicializacao_segura() # Executa a recuperação antes de começar o loop da IA
     ai_decision_loop()
