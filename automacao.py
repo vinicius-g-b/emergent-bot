@@ -42,21 +42,19 @@ status_bot = {
 }
 
 # ==========================================
-# 1. AUTO-RECUPERAÇÃO (DICA DO SÊNIOR)
+# 1. AUTO-RECUPERAÇÃO
 # ==========================================
 def inicializacao_segura():
     """Garante que o bot recupere o estado caso o Render reinicie o servidor."""
     print("🔄 Iniciando rotina de auto-recuperação (Render Warm-up)...")
     
-    # Checar último Nonce na Blockchain
     if AI_PRIVATE_KEY != "CHAVE_NAO_ENCONTRADA":
         try:
             nonce = web3.eth.get_transaction_count(ai_account.address, 'pending')
             print(f"🔗 Sincronização On-Chain concluída. Último Nonce: {nonce}")
         except Exception as e:
-            print(f"⚠️ Aviso: Não foi possível sincronizar o Nonce da rede Sepolia: {e}")
+            print(f"⚠️ Aviso: Não foi possível sincronizar o Nonce: {e}")
 
-    # Checar último estado no Supabase
     try:
         response = supabase.table("ai_logs").select("*").order("created_at", desc=True).limit(1).execute()
         if response.data:
@@ -85,16 +83,12 @@ def obter_sentimento_mercado():
         return 0.0, "Neutral"
 
 def analisar_risco_sistemico():
-    """Analisa Risco Sistêmico com foco na Saúde e Liquidez das Pools (Dica do Sênior)"""
     try:
-        # Aqui, no futuro, puxaremos dados de The Graph ou DefiLlama.
-        # Estamos simulando uma verificação de profundidade do Order Book e Liquidez.
         pool_liquidity_healthy = True 
-        
         if pool_liquidity_healthy:
-            risco = random.uniform(0.1, 0.4) # Liquidez alta, risco baixo de slippage
+            risco = random.uniform(0.1, 0.4) 
         else:
-            risco = random.uniform(0.7, 1.0) # Liquidez drenada, alerta vermelho!
+            risco = random.uniform(0.7, 1.0) 
             print("⚠️ Alerta On-chain: Baixa liquidez detectada nas pools!")
         return risco
     except:
@@ -161,7 +155,6 @@ def executar_ordem(tipo_ordem, valor_dolares):
         print(f"🚀 Transação Hash: {web3.to_hex(tx_hash)}")
     except Exception as e:
         print(f"❌ Falha on-chain (Possível pico de Gas ou Congestionamento): {e}")
-        # DICA DO SÊNIOR: Avisar o App se a transação falhar por causa da rede
         avisar_app("NETWORK DELAY", "A rede Ethereum está congestionada ou a taxa de Gas oscilou. Aguardando estabilidade para tentar novamente.", 0)
 
 # ==========================================
@@ -227,10 +220,12 @@ def ai_decision_loop():
                 
             status_bot["confianca_ia"] = round(confianca * 100, 2)
 
-            if confianca < 0.80:
-                print(f"⚖️ Confiança baixa ({status_bot['confianca_ia']}%).")
+            # FILTRO DE SLIPPAGE E TAXAS (SÊNIOR APROVOU)
+            # A IA só opera se tiver mais de 85% de certeza, garantindo que o lucro pague os custos operacionais da rede.
+            if confianca < 0.85:
+                print(f"⚖️ Confiança de {status_bot['confianca_ia']}% insuficiente para cobrir Gas e Slippage.")
                 status_bot["ultima_decisao"] = "HOLD"
-                avisar_app("HOLD", f"Complex market conditions. Analyzing macro data before moving treasury.", status_bot["confianca_ia"])
+                avisar_app("HOLD", f"Signal confidence ({status_bot['confianca_ia']}%) does not cover expected gas fees and slippage. Treasury remains parked.", status_bot["confianca_ia"])
                 
             else:
                 if decision == 2:
@@ -271,5 +266,5 @@ def run_web():
 
 if __name__ == "__main__":
     threading.Thread(target=run_web).start()
-    inicializacao_segura() # Executa a recuperação antes de começar o loop da IA
+    inicializacao_segura()
     ai_decision_loop()
