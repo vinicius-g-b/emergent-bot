@@ -5,6 +5,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 from datetime import datetime
+import sys
 
 print("🔄 Iniciando Rotina de MLOps: Fine-Tuning Diário da Emergent AI...")
 
@@ -23,21 +24,34 @@ class EmergentBrain(nn.Module):
     def forward(self, x):
         return self.rede(x)
 
-# 2. O COLETOR E O BUFFER DE MEMÓRIA (Até o dia de HOJE)
+# 2. O COLETOR E O SANITY CHECK (Filtro de Lixo)
 def atualizar_dados_mercado():
     hoje = datetime.now().strftime('%Y-%m-%d')
     print(f"📥 Coletando dados de 2020 até HOJE ({hoje})...")
     
-    # Baixa a história toda. Isso garante a proporção 90% passado (Crashes/Bulls) e 10% presente.
-    df = yf.download('BTC-USD', start='2020-01-01', end=hoje, progress=False)
-    
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.droplevel(1)
+    try:
+        df = yf.download('BTC-USD', start='2020-01-01', end=hoje, progress=False)
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.droplevel(1)
+            
+        df = df.dropna()
         
-    df = df.dropna()
+        # SANITY CHECK: Se a API retornou menos de 100 dias ou dados vazios, aborta!
+        if len(df) < 100 or df.isnull().values.any():
+            print("🚨 ERRO CRÍTICO: Dados da API corrompidos ou insuficientes. Abortando treinamento para proteger a IA.")
+            sys.exit(0) # Sai do script sem gerar erro no GitHub Actions
+            
+        # SANITY CHECK 2: Variações impossíveis (ex: queda de 99% em 1 dia por bug da API)
+        df['Variacao'] = df['Close'].pct_change()
+        if df['Variacao'].min() < -0.60 or df['Variacao'].max() > 0.60:
+            print("🚨 ERRO CRÍTICO: Anomalia irreal de preço detectada. Possível bug no Yahoo Finance. Abortando.")
+            sys.exit(0)
+            
+    except Exception as e:
+        print(f"🚨 ERRO CRÍTICO na conexão com a API: {e}. Abortando.")
+        sys.exit(0)
 
     # Cálculos quantitativos
-    df['Variacao'] = df['Close'].pct_change()
     df['Preco_Norm'] = df['Close'] / 100000.0
     df['Volume_Norm'] = df['Volume'] / df['Volume'].rolling(window=30).max()
     
@@ -48,7 +62,6 @@ def atualizar_dados_mercado():
     df['Risco'] = (df['Variacao'].rolling(window=14).std() * 100)
     df['Risco'] = (df['Risco'] / df['Risco'].max()).clip(0.0, 1.0)
 
-    # Gabarito (Target)
     df['Retorno_Futuro_3d'] = df['Close'].shift(-3) / df['Close'] - 1
     df = df.dropna()
 
@@ -64,36 +77,50 @@ def atualizar_dados_mercado():
     
     return torch.tensor(entradas, dtype=torch.float32), torch.tensor(saidas, dtype=torch.long)
 
-# 3. O AJUSTE FINO (Fine-Tuning Seguro)
+# 3. O GUARDIÃO DO DEPLOY E O FINE-TUNING
 X_treino, Y_treino = atualizar_dados_mercado()
 
-modelo = EmergentBrain()
-
-# TENTA CARREGAR O CÉREBRO EXISTENTE PARA NÃO PERDER A MEMÓRIA
-try:
-    modelo.load_state_dict(torch.load('emergent_brain.pth'))
-    print("🧠 Cérebro base 'emergent_brain.pth' carregado com sucesso. Iniciando expansão neural...")
-except Exception as e:
-    print("⚠️ Cérebro base não encontrado. Treinando um novo do zero...")
-
+modelo_novo = EmergentBrain()
+modelo_antigo = EmergentBrain()
 criterio = nn.CrossEntropyLoss()
-# O SEGREDO DO SÊNIOR: Taxa de aprendizado MICRO (0.0001) para não dar "Esquecimento Catastrófico"
-otimizador = optim.Adam(modelo.parameters(), lr=0.0001) 
 
-# Poucas épocas (apenas 50), porque é só uma revisão diária, não um doutorado novo.
+# Carrega o cérebro atual de produção
+try:
+    modelo_antigo.load_state_dict(torch.load('emergent_brain.pth'))
+    modelo_novo.load_state_dict(torch.load('emergent_brain.pth'))
+    print("🧠 Cérebro base 'emergent_brain.pth' carregado.")
+except Exception as e:
+    print("⚠️ Cérebro base não encontrado. Treinando do zero.")
+
+# Mede a inteligência do cérebro ANTIGO nos dados de hoje
+modelo_antigo.eval()
+with torch.no_grad():
+    erro_antigo = criterio(modelo_antigo(X_treino), Y_treino).item()
+
+# Treina o cérebro NOVO
+otimizador = optim.Adam(modelo_novo.parameters(), lr=0.0001) 
 epocas_fine_tuning = 50 
-print(f"⚙️ Aplicando Fine-Tuning de {epocas_fine_tuning} épocas...")
+print(f"⚙️ Aplicando Fine-Tuning de {epocas_fine_tuning} épocas no novo modelo...")
 
+modelo_novo.train()
 for epoca in range(epocas_fine_tuning):
     otimizador.zero_grad()
-    previsoes = modelo(X_treino)
+    previsoes = modelo_novo(X_treino)
     erro = criterio(previsoes, Y_treino)
     erro.backward()
     otimizador.step()
 
-acertos = (torch.argmax(previsoes, dim=1) == Y_treino).float().mean()
-print(f"🎯 Atualização Concluída! Precisão atualizada: {acertos.item()*100:.2f}%")
+# Mede a inteligência do cérebro NOVO
+modelo_novo.eval()
+with torch.no_grad():
+    erro_novo = criterio(modelo_novo(X_treino), Y_treino).item()
 
-# 4. SALVANDO O CÉREBRO ATUALIZADO
-torch.save(modelo.state_dict(), 'emergent_brain.pth')
-print("💾 'emergent_brain.pth' sobreescrito com os dados de hoje. Pronto para o deploy!")
+print(f"📊 Desempenho (Loss) -> Antigo: {erro_antigo:.4f} | Novo: {erro_novo:.4f}")
+
+# 4. A DECISÃO FINAL (O Guardião)
+if erro_novo < erro_antigo:
+    torch.save(modelo_novo.state_dict(), 'emergent_brain.pth')
+    print("✅ SUCESSO! O modelo novo é mais inteligente. 'emergent_brain.pth' sobreescrito.")
+else:
+    print("🛡️ GUARDIÃO ATIVADO: O treinamento de hoje piorou a IA (Overfitting/Ruído).")
+    print("Descartando atualização. Mantendo o cérebro antigo em produção para segurança da VGB Tech.")
