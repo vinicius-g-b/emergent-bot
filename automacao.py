@@ -112,17 +112,22 @@ class EmergentBrain(nn.Module):
         return self.rede(x)
 
 # ==========================================
-# 4. BLOCKCHAIN & EXECUÇÃO COM TRANSPARÊNCIA
+# 4. BLOCKCHAIN & EXECUÇÃO COM TRANSPARÊNCIA (L2 ARBITRUM)
 # ==========================================
-RPC_URL = "https://ethereum-sepolia-rpc.publicnode.com"
+RPC_URL = "https://sepolia-rollup.arbitrum.io/rpc"
 web3 = Web3(Web3.HTTPProvider(RPC_URL))
 
-VAULT_ADDRESS = web3.to_checksum_address("0x6b1519CA41602B91F12A6269F04AE656D5FB4803")
-EUSD_ADDRESS = web3.to_checksum_address("0x960C3A75ad6b793882D643f8B71c33945269af01")
+# Contratos Oficiais VGB Tech na Arbitrum Sepolia
+VAULT_ADDRESS = web3.to_checksum_address("0x5185cfEB2628CBEDeE04aCf320E13634Be63A2D5")
+EUSD_ADDRESS = web3.to_checksum_address("0x2e17393bd766f8b1c5007224854b82afde23d1fc")
+
+# Puxando a chave privada com segurança do servidor (Render)
 AI_PRIVATE_KEY = os.environ.get("PRIVATE_KEY", "CHAVE_NAO_ENCONTRADA") 
 
 if AI_PRIVATE_KEY != "CHAVE_NAO_ENCONTRADA":
     ai_account = web3.eth.account.from_key(AI_PRIVATE_KEY)
+else:
+    print("🚨 AVISO CRÍTICO: Chave Privada não encontrada no ambiente Render. As transações não serão assinadas.")
 
 try:
     with open("vault_abi.json", "r") as file:
@@ -132,7 +137,10 @@ except Exception as e:
     print(f"⚠️ Erro ABI: {e}")
 
 def executar_ordem(tipo_ordem, valor_dolares):
-    if AI_PRIVATE_KEY == "CHAVE_NAO_ENCONTRADA": return
+    if AI_PRIVATE_KEY == "CHAVE_NAO_ENCONTRADA": 
+        print("❌ Operação abortada: Bot sem permissão para operar (Chave Privada ausente).")
+        return
+        
     amount_wei = web3.to_wei(valor_dolares, 'ether')
     
     if tipo_ordem == "COMPRA":
@@ -155,8 +163,8 @@ def executar_ordem(tipo_ordem, valor_dolares):
         print(f"🚀 Transação Hash: {web3.to_hex(tx_hash)}")
     except Exception as e:
         print(f"❌ Falha on-chain (Possível pico de Gas ou Congestionamento): {e}")
-        avisar_app("NETWORK DELAY", "A rede Ethereum está congestionada ou a taxa de Gas oscilou. Aguardando estabilidade para tentar novamente.", 0)
-
+        avisar_app("NETWORK DELAY", "A rede Arbitrum está congestionada ou a taxa de Gas oscilou. Aguardando estabilidade.", 0)
+        
 # ==========================================
 # 5. LOOP PRINCIPAL DA IA MULTICAMADA
 # ==========================================
