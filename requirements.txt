@@ -5,3 +5,6 @@ requests
 flask
 numpy
 supabase
+fastapi
+uvicorn
+pydantic
