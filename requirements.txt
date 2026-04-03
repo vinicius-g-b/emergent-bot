@@ -4,6 +4,4 @@ web3
 requests
 numpy
 supabase
-fastapi
-uvicorn
-pydantic
+flask
