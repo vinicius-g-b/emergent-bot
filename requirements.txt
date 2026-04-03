@@ -2,7 +2,6 @@
 torch
 web3
 requests
-flask
 numpy
 supabase
 fastapi
