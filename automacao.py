@@ -307,15 +307,10 @@ def executar_ordem(tipo_ordem, valor_dolares):
         gas_estimado = funcao.estimate_gas({'from': ai_account.address})
 
         tx = funcao.build_transaction({
-
             'from': ai_account.address,
-
             'nonce': nonce,
-
             'gas': int(gas_estimado * 1.2), 
-
-            'gasPrice': web3.eth.gas_price
-
+            'gasPrice': int(web3.eth.gas_price * 1.15) # 🚀 Adicionando 15% de margem para evitar o erro -32000
         })
 
         signed_tx = web3.eth.account.sign_transaction(tx, private_key=AI_PRIVATE_KEY)
@@ -421,19 +416,18 @@ def ai_decision_loop():
 
 
         # CIRCUIT BREAKER (DEFESA)
-
         if sentimento_texto == "Extreme Fear" or risco_sistemico > 0.85:
-
-            print("🚨 ALERTA VERMELHO: Risco Crítico de Liquidez ou Sentimento Detectado! Ignorando Rede Neural.")
-
-            status_bot["ultima_decisao"] = "EMERGENCY HEDGE"
-
-            status_bot["confianca_ia"] = 100.0
-
-            executar_ordem("VENDA", 100)
-
-            avisar_app("EMERGENCY HEDGE", f"Extreme Fear or Liquidity Anomaly detected. Executing emergency capital protection to eUSD.", 100)
-
+            print("🚨 ALERTA VERMELHO: Risco Crítico de Liquidez ou Sentimento Detectado!")
+            
+            # Só executa a venda se a última decisão NÃO foi o Hedge. Se já está protegido, apenas aguarda.
+            if status_bot["ultima_decisao"] != "EMERGENCY HEDGE":
+                status_bot["ultima_decisao"] = "EMERGENCY HEDGE"
+                status_bot["confianca_ia"] = 100.0
+                executar_ordem("VENDA", 100)
+                avisar_app("EMERGENCY HEDGE", "Extreme Fear detectado. Executando proteção de capital para eUSD.", 100)
+            else:
+                print("🛡️ O Cérebro já está em Hedge. Nenhuma ação necessária, aguardando melhora do mercado.")
+                avisar_app("HOLD (HEDGED)", "Mercado continua crítico, mas o cofre já está seguro em eUSD.", 100)
         
 
         # REDE NEURAL PADRÃO
